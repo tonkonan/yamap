@@ -56,12 +56,15 @@
     
     <script>
         // Инициализация карты
-        const map = L.map('map').setView([53.547, 81.519], 7);
+        const map = L.map('map', { attributionControl: false }).setView([53.547, 81.519], 7);
         
-        // Добавляем слой OpenStreetMap
+        // Добавляем слой OpenStreetMap только с нужной подписью
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
+        
+        // Добавляем кастомный attribution control без префикса (без Leaflet)
+        map.attributionControl = L.control.attribution({prefix: false}).addTo(map);
 
         // Функция для получения случайного цвета
         function getRandomColor() {
@@ -83,7 +86,6 @@
                 loader.style.display = 'block';
                 regionInfo.innerHTML = 'Загрузка данных о районах Алтайского края...';
                 
-                // Загружаем границы Алтайского края
                 const response = await fetch('/api/districts');
                 if (!response.ok) {
                     throw new Error(`Ошибка HTTP: ${response.status}`);
@@ -98,32 +100,59 @@
 
                 // Создаем группу для объектов
                 const geoObjects = L.layerGroup().addTo(map);
+                let bounds = null;
 
                 // Добавляем границы районов на карту
                 data.features.forEach((feature, index) => {
                     console.log(`Обрабатываем район ${index + 1}:`, feature.properties.name);
-                    console.log('Геометрия района:', feature.geometry);
                     
-                    // Создаем полигон с границами района
-                    const polygon = L.geoJSON(feature, {
-                        style: {
-                            color: '#FF4500', // Оранжевый цвет для границ
+                    try {
+                        let coords = feature.geometry.coordinates;
+
+                        // Если MultiPolygon, делаем массив массивов
+                        if (feature.geometry.type === 'MultiPolygon') {
+                            coords = coords.map(polygon =>
+                                polygon.map(ring =>
+                                    ring.map(([lon, lat]) => [lat, lon])
+                                )
+                            );
+                        } else if (feature.geometry.type === 'Polygon') {
+                            coords = coords.map(ring =>
+                                ring.map(([lon, lat]) => [lat, lon])
+                            );
+                        }
+
+                        // Генерируем случайный цвет для границы и заливки
+                        const borderColor = getRandomColor();
+                        const fillColor = getRandomColor();
+
+                        // Создаём полигон
+                        const polygon = L.polygon(coords, {
+                            color: borderColor,
                             weight: 3,
                             fillOpacity: 0.2,
-                            fillColor: '#FFA500'
-                        },
-                        onEachFeature: function(feature, layer) {
-                            layer.bindPopup(`<strong>${feature.properties.name}</strong>`);
+                            fillColor: fillColor
+                        }).addTo(geoObjects);
+
+                        polygon.bindPopup(`<strong>${feature.properties.name}</strong>`);
+
+                        if (!bounds) {
+                            bounds = polygon.getBounds();
+                        } else {
+                            bounds.extend(polygon.getBounds());
                         }
-                    }).addTo(geoObjects);
+                    } catch (error) {
+                        console.error(`Ошибка при отображении района ${feature.properties.name}:`, error);
+                    }
                 });
 
-                // Устанавливаем границы карты по границам всех объектов
-                const bounds = geoObjects.getBounds();
-                if (bounds.isValid()) {
+                // Устанавливаем границы карты
+                if (bounds && bounds.isValid()) {
                     map.fitBounds(bounds.pad(0.1));
                 } else {
                     console.warn('Не удалось определить границы карты');
+                    // Устанавливаем центр карты на Алтайский край
+                    map.setView([53.547, 81.519], 7);
                 }
 
                 regionInfo.innerHTML = `

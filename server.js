@@ -25,28 +25,93 @@ app.get('/openstreet', (req, res) => {
 app.get('/api/districts', async (req, res) => {
     try {
         console.log('Получен запрос на /api/districts');
-        console.log('Отправляем запрос к GeoTree API...');
+        console.log('Отправляем запрос к OpenStreetMap Overpass API...');
         
-        const response = await axios.get('https://api.geotree.ru/admin.php', {
-            params: {
-                key: '8emEnXN8laSk',
-                level: 3,
-                parent: 22
+        // Запрос к Overpass API для получения границ районов Алтайского края
+        const query = `
+            [out:json][timeout:25];
+            area["name:ru"="Алтайский край"]->.altai;
+            (
+              relation["admin_level"="6"](area.altai);
+              way(r);
+              node(w);
+            );
+            out body;
+            >;
+            out skel qt;
+        `;
+        
+        const url = 'https://overpass-api.de/api/interpreter';
+        console.log('URL:', url);
+        console.log('Query:', query);
+        
+        const response = await axios.post(url, query, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
         });
         
-        console.log('Получен ответ от GeoTree:', response.status);
-        console.log('Данные:', response.data);
+        console.log('Получен ответ от Overpass API:', response.status);
         
-        res.json(response.data);
+        // Собираем данные для построения полигонов
+        const elements = response.data.elements;
+        const relations = elements.filter(el => el.type === 'relation');
+        const ways = elements.filter(el => el.type === 'way');
+        const nodes = elements.filter(el => el.type === 'node');
+        
+        // Создаем словарь узлов для быстрого доступа
+        const nodeDict = {};
+        nodes.forEach(node => {
+            nodeDict[node.id] = [node.lon, node.lat];
+        });
+        
+        // Преобразуем данные в формат GeoJSON
+        const geojson = {
+            type: 'FeatureCollection',
+            features: relations.map(relation => {
+                // Получаем все пути для этого отношения
+                const relationWays = ways.filter(way => 
+                    relation.members.some(member => 
+                        member.type === 'way' && member.ref === way.id
+                    )
+                );
+                
+                // Собираем координаты для полигона
+                const coordinates = relationWays.map(way => 
+                    way.nodes.map(nodeId => nodeDict[nodeId])
+                );
+                
+                return {
+                    type: 'Feature',
+                    properties: {
+                        name: relation.tags.name,
+                        admin_level: relation.tags['admin_level']
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: coordinates
+                    }
+                };
+            })
+        };
+        
+        console.log('Преобразованные данные:', JSON.stringify(geojson, null, 2));
+        res.json(geojson);
+        
     } catch (error) {
-        console.error('Детальная ошибка при запросе к GeoTree:', {
+        console.error('Детальная ошибка при запросе к Overpass API:', {
             message: error.message,
             response: error.response ? {
                 status: error.response.status,
-                data: error.response.data
+                data: error.response.data,
+                headers: error.response.headers
             } : 'Нет ответа',
-            config: error.config
+            config: {
+                url: error.config?.url,
+                method: error.config?.method,
+                data: error.config?.data,
+                headers: error.config?.headers
+            }
         });
         res.status(500).json({ 
             error: 'Ошибка при получении данных',
