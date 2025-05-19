@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта Алтайского края - OpenStreetMap</title>
+    
+    <!-- Подключаем Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #map {
+            width: 100%;
+            height: 50vh;
+            margin-bottom: 20px;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .loader {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loader" class="loader">Загрузка данных...</div>
+    <div id="regionInfo" class="info-panel"></div>
+
+    <!-- Подключаем Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Инициализация карты
+        const map = L.map('map').setView([53.547, 81.519], 7);
+        
+        // Добавляем слой OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Функция для получения случайного цвета
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        // Функция загрузки районов
+        async function loadAltaiDistricts() {
+            const loader = document.getElementById('loader');
+            const regionInfo = document.getElementById('regionInfo');
+            
+            try {
+                console.log('Начинаем загрузку районов Алтайского края...');
+                loader.style.display = 'block';
+                regionInfo.innerHTML = 'Загрузка данных о районах Алтайского края...';
+                
+                // Загружаем границы Алтайского края
+                const response = await fetch('/api/districts');
+                if (!response.ok) {
+                    throw new Error(`Ошибка HTTP: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Получены данные:', data);
+
+                if (!data || !data.features) {
+                    throw new Error('Нет данных о границах');
+                }
+
+                // Создаем группу для объектов
+                const geoObjects = L.layerGroup().addTo(map);
+
+                // Добавляем границы районов на карту
+                data.features.forEach((feature, index) => {
+                    console.log(`Обрабатываем район ${index + 1}:`, feature.properties.name);
+                    console.log('Геометрия района:', feature.geometry);
+                    
+                    // Создаем полигон с границами района
+                    const polygon = L.geoJSON(feature, {
+                        style: {
+                            color: '#FF4500', // Оранжевый цвет для границ
+                            weight: 3,
+                            fillOpacity: 0.2,
+                            fillColor: '#FFA500'
+                        },
+                        onEachFeature: function(feature, layer) {
+                            layer.bindPopup(`<strong>${feature.properties.name}</strong>`);
+                        }
+                    }).addTo(geoObjects);
+                });
+
+                // Устанавливаем границы карты по границам всех объектов
+                const bounds = geoObjects.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds.pad(0.1));
+                } else {
+                    console.warn('Не удалось определить границы карты');
+                }
+
+                regionInfo.innerHTML = `
+                    <div>
+                        <strong>Районы Алтайского края успешно загружены</strong>
+                        <p>Количество районов: ${data.features.length}</p>
+                        <p>Проверьте консоль для отладочной информации</p>
+                    </div>
+                `;
+
+                console.log('Загрузка районов завершена успешно');
+
+            } catch (error) {
+                console.error('Ошибка при загрузке данных:', error);
+                regionInfo.innerHTML = `
+                    <div style="color: red;">
+                        <strong>Ошибка:</strong> ${error.message}
+                    </div>
+                `;
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        // Загружаем районы при загрузке страницы
+        loadAltaiDistricts();
+    </script>
+</body>
+</html>

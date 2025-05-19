@@ -1,0 +1,35 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Алейский район"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[82.5, 52.5], [82.7, 52.5], [82.7, 52.7], [82.5, 52.7], [82.5, 52.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Бийский район"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[85.0, 52.5], [85.2, 52.5], [85.2, 52.7], [85.0, 52.7], [85.0, 52.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Благовещенский район"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[79.5, 52.5], [79.7, 52.5], [79.7, 52.7], [79.5, 52.7], [79.5, 52.5]]]
+      }
+    }
+  ]
+}
